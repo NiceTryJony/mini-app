@@ -1,4 +1,4 @@
-const API_URL = 'https://mini-app-backend-jqr6.onrender.com'; // Твой URL
+const API_URL = 'https://mini-app-2pze.onrender.com'; // Твой URL
 
 let tg = window.Telegram.WebApp;
 tg.expand();
