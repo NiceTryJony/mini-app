@@ -35,7 +35,7 @@ function showLoader(message) {
             : 'Server is not responding. Reload the app?')) {
             window.location.reload();
         }
-    }, 30000);
+    }, 60000);
 }
 
 function hideLoader() {
@@ -66,20 +66,61 @@ async function fetchWithLoader(url, options = {}, loaderMessage = null) {
 // === ИНИЦИАЛИЗАЦИЯ ===
 
 async function init() {
-    showLoader(currentLang === 'uk' ? 'Ініціалізація...' : 'Initializing...');
-    
     const user = tg.initDataUnsafe.user;
     
     if (user) {
-        currentUser = await registerUser(user);
-        currentLang = currentUser.language || 'uk';
-        allUsers = await loadAllUsers();
+        // Устанавливаем базовые данные БЕЗ сервера
+        currentUser = {
+            telegram_id: user.id,
+            username: user.username || 'user',
+            first_name: user.first_name || 'User',
+            photo_url: user.photo_url,
+            language: 'uk'
+        };
+        currentLang = 'uk';
+        
+        // Показываем UI сразу
         updateUI();
+        renderView();
+        
+        // А серверные данные грузим В ФОНЕ
+        loadServerDataInBackground(user);
+    } else {
+        renderView();
     }
-    
-    await loadTasks();
-    renderView();
-    hideLoader();
+}
+
+async function loadServerDataInBackground(user) {
+    try {
+        // Показываем тонкий индикатор вверху (не блокирует UI)
+        showLoader(currentLang === 'uk' ? 'Підключення...' : 'Connecting...');
+        
+        // Регистрация пользователя
+        const serverUser = await registerUser(user);
+        if (serverUser) {
+            currentUser = serverUser;
+            currentLang = serverUser.language || 'uk';
+        }
+        
+        // Загружаем остальных пользователей
+        allUsers = await loadAllUsers();
+        
+        // Обновляем UI с новыми данными
+        updateUI();
+        
+        // Загружаем задачи
+        await loadTasks();
+        
+        hideLoader();
+    } catch (error) {
+        hideLoader();
+        console.error('Background server loading error:', error);
+        
+        // НЕ блокируем приложение, просто показываем уведомление
+        tg.showAlert(currentLang === 'uk'
+            ? 'Помилка підключення до сервера. Функціонал обмежений.'
+            : 'Server connection error. Limited functionality.');
+    }
 }
 
 async function registerUser(user) {
@@ -117,15 +158,15 @@ async function loadAllUsers() {
 
 async function loadTasks() {
     try {
-        const response = await fetchWithLoader(
-            `${API_URL}/api/tasks`,
-            {},
-            currentLang === 'uk' ? 'Завантаження завдань...' : 'Loading tasks...'
-        );
+        // Только при ручном обновлении показываем loader
+        const response = await fetch(`${API_URL}/api/tasks`);
         currentTasks = await response.json();
         renderTasksList();
     } catch (error) {
         console.error('Error loading tasks:', error);
+        // Показываем пустой список при ошибке
+        currentTasks = [];
+        renderTasksList();
     }
 }
 
