@@ -1,6 +1,12 @@
-const API_URL = 'https://mini-app-2pze.onrender.com'; // Твой URL
+const API_URL = 'https://mini-app-2pze.onrender.com';
 
-let tg = window.Telegram.WebApp;
+let tg = window.Telegram?.WebApp || { 
+    expand: () => {}, 
+    ready: () => {},
+    showAlert: (msg) => alert(msg),
+    initDataUnsafe: { user: null }
+};
+
 tg.expand();
 
 let currentUser = null;
@@ -11,11 +17,20 @@ let currentTasks = [];
 let checklistExpanded = false;
 let loadingTimeout = null;
 
-// === ГЛОБАЛЬНЫЙ ИНДИКАТОР ЗАГРУЗКИ ===
+// === ОТЛАДКА ===
+function logDebug(message, data = null) {
+    console.log(`[DEBUG] ${message}`, data || '');
+}
 
+// === ГЛОБАЛЬНЫЙ ИНДИКАТОР ЗАГРУЗКИ ===
 function showLoader(message) {
     const loader = document.getElementById('globalLoader');
     const loaderText = document.getElementById('loaderText');
+    
+    if (!loader || !loaderText) {
+        console.error('Loader elements not found!');
+        return;
+    }
     
     if (message) {
         loaderText.textContent = message;
@@ -26,7 +41,6 @@ function showLoader(message) {
     loader.classList.add('active');
     document.body.classList.add('loading');
     
-    // Таймаут на 30 секунд
     clearTimeout(loadingTimeout);
     loadingTimeout = setTimeout(() => {
         hideLoader();
@@ -40,36 +54,53 @@ function showLoader(message) {
 
 function hideLoader() {
     const loader = document.getElementById('globalLoader');
-    loader.classList.remove('active');
+    if (loader) {
+        loader.classList.remove('active');
+    }
     document.body.classList.remove('loading');
     clearTimeout(loadingTimeout);
 }
 
 // === ОБЕРТКА ДЛЯ FETCH С ЗАГРУЗКОЙ ===
-
 async function fetchWithLoader(url, options = {}, loaderMessage = null) {
+    logDebug('Fetching:', url);
     showLoader(loaderMessage);
+    
     try {
-        const response = await fetch(url, options);
+        const response = await fetch(url, {
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+        
         hideLoader();
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         return response;
     } catch (error) {
         hideLoader();
-        console.error('Fetch error:', error);
+        logDebug('Fetch error:', error);
         tg.showAlert(currentLang === 'uk' 
-            ? 'Помилка з\'єднання з сервером' 
-            : 'Connection error');
+            ? `Помилка з'єднання: ${error.message}` 
+            : `Connection error: ${error.message}`);
         throw error;
     }
 }
 
 // === ИНИЦИАЛИЗАЦИЯ ===
-
 async function init() {
-    const user = tg.initDataUnsafe.user;
+    logDebug('Initializing app...');
+    
+    const user = tg.initDataUnsafe?.user;
+    
+    logDebug('Telegram user:', user);
     
     if (user) {
-        // Устанавливаем базовые данные БЕЗ сервера
         currentUser = {
             telegram_id: user.id,
             username: user.username || 'user',
@@ -79,44 +110,95 @@ async function init() {
         };
         currentLang = 'uk';
         
-        // Показываем UI сразу
         updateUI();
         renderView();
         
-        // А серверные данные грузим В ФОНЕ
         loadServerDataInBackground(user);
     } else {
+        // Режим разработки - создаем тестового пользователя
+        logDebug('No Telegram user, using demo mode');
+        currentUser = {
+            telegram_id: 12345,
+            username: 'demo_user',
+            first_name: 'Demo',
+            photo_url: null,
+            language: 'uk'
+        };
+        currentLang = 'uk';
+        
+        updateUI();
         renderView();
+        
+        // Пробуем загрузить данные с сервера
+        try {
+            await testServerConnection();
+            await loadTasks();
+        } catch (error) {
+            logDebug('Server not available in demo mode:', error);
+            showDemoMessage();
+        }
+    }
+}
+
+// === ТЕСТ СОЕДИНЕНИЯ С СЕРВЕРОМ ===
+async function testServerConnection() {
+    logDebug('Testing server connection...');
+    try {
+        const response = await fetch(`${API_URL}/ping`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Server responded with ${response.status}`);
+        }
+        
+        const data = await response.json();
+        logDebug('Server ping successful:', data);
+        return true;
+    } catch (error) {
+        logDebug('Server ping failed:', error);
+        throw error;
+    }
+}
+
+function showDemoMessage() {
+    const container = document.getElementById('tasksContainer');
+    if (container) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">⚠️</div>
+                <div style="margin-bottom: 10px;">Сервер недоступний</div>
+                <div style="font-size: 14px; opacity: 0.7;">
+                    Перевірте підключення до інтернету або спробуйте пізніше
+                </div>
+                <button class="btn btn-primary" onclick="window.location.reload()" style="margin-top: 20px;">
+                    Оновити
+                </button>
+            </div>
+        `;
     }
 }
 
 async function loadServerDataInBackground(user) {
     try {
-        // Показываем тонкий индикатор вверху (не блокирует UI)
         showLoader(currentLang === 'uk' ? 'Підключення...' : 'Connecting...');
         
-        // Регистрация пользователя
         const serverUser = await registerUser(user);
         if (serverUser) {
             currentUser = serverUser;
             currentLang = serverUser.language || 'uk';
         }
         
-        // Загружаем остальных пользователей
         allUsers = await loadAllUsers();
-        
-        // Обновляем UI с новыми данными
         updateUI();
-        
-        // Загружаем задачи
         await loadTasks();
         
         hideLoader();
     } catch (error) {
         hideLoader();
-        console.error('Background server loading error:', error);
+        logDebug('Background server loading error:', error);
         
-        // НЕ блокируем приложение, просто показываем уведомление
         tg.showAlert(currentLang === 'uk'
             ? 'Помилка підключення до сервера. Функціонал обмежений.'
             : 'Server connection error. Limited functionality.');
@@ -137,9 +219,14 @@ async function registerUser(user) {
                 language: 'uk'
             })
         });
+        
+        if (!response.ok) {
+            throw new Error(`Registration failed: ${response.status}`);
+        }
+        
         return await response.json();
     } catch (error) {
-        console.error('Error registering user:', error);
+        logDebug('Error registering user:', error);
         return null;
     }
 }
@@ -147,31 +234,49 @@ async function registerUser(user) {
 async function loadAllUsers() {
     try {
         const response = await fetch(`${API_URL}/api/users`);
+        if (!response.ok) {
+            throw new Error(`Failed to load users: ${response.status}`);
+        }
         return await response.json();
     } catch (error) {
-        console.error('Error loading users:', error);
+        logDebug('Error loading users:', error);
         return [];
     }
 }
 
 // === ЗАГРУЗКА ЗАДАЧ ===
-
 async function loadTasks() {
     try {
-        // Только при ручном обновлении показываем loader
+        logDebug('Loading tasks...');
         const response = await fetch(`${API_URL}/api/tasks`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to load tasks: ${response.status}`);
+        }
+        
         currentTasks = await response.json();
+        logDebug('Tasks loaded:', currentTasks.length);
         renderTasksList();
     } catch (error) {
-        console.error('Error loading tasks:', error);
-        // Показываем пустой список при ошибке
+        logDebug('Error loading tasks:', error);
         currentTasks = [];
-        renderTasksList();
+        
+        const container = document.getElementById('tasksContainer');
+        if (container) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">❌</div>
+                    <div>Не вдалося завантажити завдання</div>
+                    <button class="btn btn-primary" onclick="loadTasks()" style="margin-top: 20px;">
+                        Спробувати ще раз
+                    </button>
+                </div>
+            `;
+        }
     }
 }
 
 // === РЕНДЕРИНГ ===
-
 function updateUI() {
     document.querySelectorAll('[data-translate]').forEach(el => {
         const key = el.getAttribute('data-translate');
@@ -179,23 +284,36 @@ function updateUI() {
     });
     
     const userAvatar = document.getElementById('userAvatar');
-    if (currentUser) {
+    if (currentUser && userAvatar) {
         if (currentUser.photo_url) {
             userAvatar.innerHTML = `<img src="${currentUser.photo_url}" alt="${currentUser.first_name}">`;
         } else {
             userAvatar.textContent = currentUser.first_name.charAt(0).toUpperCase();
         }
     }
+    
+    const timezoneInfo = document.getElementById('timezoneInfo');
+    if (timezoneInfo) {
+        timezoneInfo.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    }
 }
 
 function renderView() {
     document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
-    document.getElementById(`${currentView}View`).style.display = 'block';
+    
+    const viewElement = document.getElementById(`${currentView}View`);
+    if (viewElement) {
+        viewElement.style.display = 'block';
+    }
     
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.classList.remove('active');
     });
-    document.querySelector(`[data-view="${currentView}"]`).classList.add('active');
+    
+    const activeTab = document.querySelector(`[data-view="${currentView}"]`);
+    if (activeTab) {
+        activeTab.classList.add('active');
+    }
     
     if (currentView === 'tasks') {
         loadTasks();
@@ -210,9 +328,13 @@ function switchView(view) {
 }
 
 // === ЗАДАЧИ ===
-
 function renderTasksList() {
     const container = document.getElementById('tasksContainer');
+    
+    if (!container) {
+        logDebug('Tasks container not found!');
+        return;
+    }
     
     if (currentTasks.length === 0) {
         container.innerHTML = `
@@ -353,7 +475,6 @@ function createTaskCard(task) {
 }
 
 // === МОДАЛЬНЫЕ ОКНА ===
-
 function openCreateModal() {
     checklistExpanded = false;
     document.getElementById('taskForm').reset();
@@ -363,6 +484,8 @@ function openCreateModal() {
     document.getElementById('checklistPreview').innerHTML = '';
     document.getElementById('checklistSection').style.display = 'none';
     document.getElementById('taskModal').classList.add('active');
+    
+    tempChecklist = [];
 }
 
 async function openEditModal(taskId) {
@@ -382,16 +505,19 @@ async function openEditModal(taskId) {
     document.getElementById('taskPrepDate').value = task.preparation_date.slice(0, 16);
     
     const photoPreview = document.getElementById('photoPreview');
-    photoPreview.innerHTML = task.photos.map((photo, index) => `
+    photoPreview.innerHTML = task.photos ? task.photos.map((photo, index) => `
         <div class="photo-preview-item">
             <img src="${API_URL}${photo}" class="photo-preview-img">
             <button type="button" class="photo-remove-btn" onclick="removePhoto('${taskId}', ${index})">×</button>
         </div>
-    `).join('');
+    `).join('') : '';
     
     checklistExpanded = task.checklist && task.checklist.length > 0;
-    renderChecklistPreview(task.checklist || []);
+    tempChecklist = task.checklist || [];
+    renderChecklistPreview(tempChecklist);
     document.getElementById('checklistSection').style.display = checklistExpanded ? 'block' : 'none';
+    document.getElementById('checklistToggleBtn').textContent = 
+        checklistExpanded ? `▼ ${t('hideChecklist', currentLang)}` : `▶ ${t('showChecklist', currentLang)}`;
     
     document.getElementById('taskModal').classList.add('active');
     hideLoader();
@@ -455,7 +581,6 @@ function removeChecklistItem(index) {
 }
 
 // === СОЗДАНИЕ/РЕДАКТИРОВАНИЕ ЗАДАЧИ ===
-
 async function saveTask(event) {
     event.preventDefault();
     
@@ -506,12 +631,11 @@ async function saveTask(event) {
             tg.showAlert(taskId ? t('taskUpdated', currentLang) : t('taskCreated', currentLang));
         }
     } catch (error) {
-        console.error('Error saving task:', error);
+        logDebug('Error saving task:', error);
     }
 }
 
 // === ФОТО ===
-
 async function uploadPhoto() {
     const taskId = document.getElementById('taskId').value;
     if (!taskId) {
@@ -528,31 +652,33 @@ async function uploadPhoto() {
     formData.append('photo', file);
     
     try {
-        const response = await fetchWithLoader(
-            `${API_URL}/api/tasks/${taskId}/photos`,
-            {
-                method: 'POST',
-                body: formData
-            },
-            currentLang === 'uk' ? 'Завантаження фото...' : 'Uploading photo...'
-        );
+        const response = await fetch(`${API_URL}/api/tasks/${taskId}/photos`, {
+            method: 'POST',
+            body: formData
+        });
         
-        if (response.ok) {
-            const data = await response.json();
-            tg.showAlert(t('photoUploaded', currentLang));
-            
-            const preview = document.getElementById('photoPreview');
-            const newPhoto = document.createElement('div');
-            newPhoto.className = 'photo-preview-item';
-            newPhoto.innerHTML = `
-                <img src="${API_URL}${data.photo_url}" class="photo-preview-img">
-                <button type="button" class="photo-remove-btn" 
-                        onclick="removePhoto('${taskId}', ${data.task.photos.length - 1})">×</button>
-            `;
-            preview.appendChild(newPhoto);
+        showLoader(currentLang === 'uk' ? 'Завантаження фото...' : 'Uploading photo...');
+        
+        if (!response.ok) {
+            throw new Error(`Upload failed: ${response.status}`);
         }
+        
+        const data = await response.json();
+        hideLoader();
+        tg.showAlert(t('photoUploaded', currentLang));
+        
+        const preview = document.getElementById('photoPreview');
+        const newPhoto = document.createElement('div');
+        newPhoto.className = 'photo-preview-item';
+        newPhoto.innerHTML = `
+            <img src="${API_URL}${data.photo_url}" class="photo-preview-img">
+            <button type="button" class="photo-remove-btn" 
+                    onclick="removePhoto('${taskId}', ${data.task.photos.length - 1})">×</button>
+        `;
+        preview.appendChild(newPhoto);
     } catch (error) {
-        console.error('Error uploading photo:', error);
+        hideLoader();
+        logDebug('Error uploading photo:', error);
     }
     
     input.value = '';
@@ -571,7 +697,7 @@ async function removePhoto(taskId, photoIndex) {
             preview.children[photoIndex].remove();
         }
     } catch (error) {
-        console.error('Error removing photo:', error);
+        logDebug('Error removing photo:', error);
     }
 }
 
@@ -587,7 +713,6 @@ function closePhotoViewer() {
 }
 
 // === ЧЕКЛИСТ В ЗАДАЧЕ ===
-
 function toggleChecklistView(taskId) {
     const container = document.getElementById(`checklist-${taskId}`);
     const arrow = document.getElementById(`checklist-arrow-${taskId}`);
@@ -619,7 +744,7 @@ async function toggleChecklistItem(taskId, itemId) {
             await loadTasks();
         }
     } catch (error) {
-        console.error('Error toggling checklist item:', error);
+        logDebug('Error toggling checklist item:', error);
     }
 }
 
@@ -637,15 +762,15 @@ async function addChecklistItemToTask(taskId, text) {
         
         if (response.ok) {
             const task = await response.json();
-            renderChecklistPreview(task.checklist);
+            tempChecklist = task.checklist;
+            renderChecklistPreview(tempChecklist);
         }
     } catch (error) {
-        console.error('Error adding checklist item:', error);
+        logDebug('Error adding checklist item:', error);
     }
 }
 
 // === ДЕЙСТВИЯ С ЗАДАЧАМИ ===
-
 async function markReady(taskId) {
     try {
         const response = await fetchWithLoader(
@@ -662,7 +787,7 @@ async function markReady(taskId) {
             await loadTasks();
         }
     } catch (error) {
-        console.error('Error marking ready:', error);
+        logDebug('Error marking ready:', error);
     }
 }
 
@@ -682,7 +807,7 @@ async function markNotGoing(taskId) {
             await loadTasks();
         }
     } catch (error) {
-        console.error('Error marking not going:', error);
+        logDebug('Error marking not going:', error);
     }
 }
 
@@ -698,7 +823,7 @@ async function completePreparation(taskId) {
             await loadTasks();
         }
     } catch (error) {
-        console.error('Error completing preparation:', error);
+        logDebug('Error completing preparation:', error);
     }
 }
 
@@ -714,7 +839,7 @@ async function uncompletePreparation(taskId) {
             await loadTasks();
         }
     } catch (error) {
-        console.error('Error uncompleting preparation:', error);
+        logDebug('Error uncompleting preparation:', error);
     }
 }
 
@@ -733,7 +858,7 @@ async function finishTask(taskId) {
             tg.showAlert('✅ ' + (currentLang === 'uk' ? 'Завдання завершено!' : 'Task finished!'));
         }
     } catch (error) {
-        console.error('Error finishing task:', error);
+        logDebug('Error finishing task:', error);
     }
 }
 
@@ -752,12 +877,11 @@ async function deleteTask(taskId) {
             tg.showAlert(t('taskDeleted', currentLang));
         }
     } catch (error) {
-        console.error('Error deleting task:', error);
+        logDebug('Error deleting task:', error);
     }
 }
 
 // === АРХИВ ===
-
 async function loadArchive() {
     try {
         showLoader(currentLang === 'uk' ? 'Завантаження архіву...' : 'Loading archive...');
@@ -771,7 +895,7 @@ async function loadArchive() {
         renderArchive(deleted, completed);
     } catch (error) {
         hideLoader();
-        console.error('Error loading archive:', error);
+        logDebug('Error loading archive:', error);
     }
 }
 
@@ -836,7 +960,7 @@ async function restoreDeletedTask(taskId) {
             tg.showAlert(t('taskRestored', currentLang));
         }
     } catch (error) {
-        console.error('Error restoring task:', error);
+        logDebug('Error restoring task:', error);
     }
 }
 
@@ -853,12 +977,11 @@ async function restoreCompletedTask(taskId) {
             tg.showAlert(t('taskRestored', currentLang));
         }
     } catch (error) {
-        console.error('Error restoring task:', error);
+        logDebug('Error restoring task:', error);
     }
 }
 
 // === НАСТРОЙКИ ===
-
 async function changeLanguage() {
     const newLang = currentLang === 'uk' ? 'en' : 'uk';
     
@@ -880,12 +1003,11 @@ async function changeLanguage() {
             renderView();
         }
     } catch (error) {
-        console.error('Error changing language:', error);
+        logDebug('Error changing language:', error);
     }
 }
 
 // === ПОИСК ===
-
 async function searchTasks() {
     const dateFrom = document.getElementById('searchDateFrom').value;
     const dateTo = document.getElementById('searchDateTo').value;
@@ -903,7 +1025,7 @@ async function searchTasks() {
         currentTasks = await response.json();
         renderTasksList();
     } catch (error) {
-        console.error('Error searching tasks:', error);
+        logDebug('Error searching tasks:', error);
     }
 }
 
@@ -914,7 +1036,6 @@ function resetSearch() {
 }
 
 // === УТИЛИТЫ ===
-
 function formatDate(date) {
     const now = new Date();
     const diff = date - now;
@@ -945,6 +1066,17 @@ function formatDate(date) {
 }
 
 // === ЗАПУСК ===
+document.addEventListener('DOMContentLoaded', () => {
+    logDebug('DOM loaded');
+    tg.ready();
+    init();
+});
 
-tg.ready();
-init();
+// На случай если DOMContentLoaded уже прошел
+if (document.readyState === 'loading') {
+    // Уже настроено выше
+} else {
+    logDebug('DOM already ready');
+    tg.ready();
+    init();
+}

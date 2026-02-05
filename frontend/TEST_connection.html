@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Manager - Тест соединения</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e1b4b 0%, #0f0f23 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 30px;
+            background: linear-gradient(90deg, #a855f7, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .test-section {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .test-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .test-result {
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .test-result.loading {
+            background: rgba(168, 85, 247, 0.2);
+            color: #a855f7;
+        }
+
+        .test-result.success {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .test-result.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        button {
+            background: linear-gradient(90deg, #a855f7, #ec4899);
+            border: none;
+            padding: 12px 20px;
+            border-radius: 12px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-top: 10px;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .info {
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Task Manager - Диагностика</h1>
+
+        <div class="info">
+            Этот инструмент проверяет работоспособность всех компонентов приложения.
+            Откройте консоль браузера (F12) для подробных логов.
+        </div>
+
+        <!-- Test 1: API URL -->
+        <div class="test-section">
+            <div class="test-title">1️⃣ Проверка API URL</div>
+            <button onclick="testApiUrl()">Проверить</button>
+            <div id="test1" class="test-result"></div>
+        </div>
+
+        <!-- Test 2: Ping -->
+        <div class="test-section">
+            <div class="test-title">2️⃣ Тест /ping endpoint</div>
+            <button onclick="testPing()">Проверить</button>
+            <div id="test2" class="test-result"></div>
+        </div>
+
+        <!-- Test 3: Get Tasks -->
+        <div class="test-section">
+            <div class="test-title">3️⃣ Тест GET /api/tasks</div>
+            <button onclick="testGetTasks()">Проверить</button>
+            <div id="test3" class="test-result"></div>
+        </div>
+
+        <!-- Test 4: Get Users -->
+        <div class="test-section">
+            <div class="test-title">4️⃣ Тест GET /api/users</div>
+            <button onclick="testGetUsers()">Проверить</button>
+            <div id="test4" class="test-result"></div>
+        </div>
+
+        <!-- Test 5: Create User -->
+        <div class="test-section">
+            <div class="test-title">5️⃣ Тест POST /api/user/register</div>
+            <button onclick="testCreateUser()">Проверить</button>
+            <div id="test5" class="test-result"></div>
+        </div>
+
+        <!-- Test 6: Create Task -->
+        <div class="test-section">
+            <div class="test-title">6️⃣ Тест POST /api/tasks</div>
+            <button onclick="testCreateTask()">Проверить</button>
+            <div id="test6" class="test-result"></div>
+        </div>
+
+        <!-- Run All -->
+        <div class="test-section" style="background: linear-gradient(90deg, rgba(168, 85, 247, 0.1), rgba(236, 72, 153, 0.1));">
+            <div class="test-title">🚀 Запустить все тесты</div>
+            <button onclick="runAllTests()">Запустить</button>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://mini-app-2pze.onrender.com';
+
+        function log(message, data = null) {
+            console.log(`[TEST] ${message}`, data || '');
+        }
+
+        function showResult(elementId, status, message) {
+            const el = document.getElementById(elementId);
+            el.className = `test-result ${status}`;
+            el.textContent = message;
+        }
+
+        // Test 1: API URL
+        async function testApiUrl() {
+            log('Testing API URL');
+            showResult('test1', 'loading', 'Проверка...');
+            
+            try {
+                const url = new URL(API_URL);
+                showResult('test1', 'success', 
+                    `✅ API URL валидный\n\n` +
+                    `Protocol: ${url.protocol}\n` +
+                    `Host: ${url.host}\n` +
+                    `Full URL: ${API_URL}`
+                );
+            } catch (error) {
+                showResult('test1', 'error', 
+                    `❌ Невалидный API URL\n\n` +
+                    `Error: ${error.message}\n` +
+                    `URL: ${API_URL}`
+                );
+            }
+        }
+
+        // Test 2: Ping
+        async function testPing() {
+            log('Testing /ping endpoint');
+            showResult('test2', 'loading', 'Отправка запроса...');
+            
+            try {
+                const startTime = Date.now();
+                const response = await fetch(`${API_URL}/ping`);
+                const duration = Date.now() - startTime;
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                log('Ping response:', data);
+                
+                showResult('test2', 'success', 
+                    `✅ Сервер отвечает (${duration}ms)\n\n` +
+                    `Status: ${data.status}\n` +
+                    `Timestamp: ${data.timestamp}\n` +
+                    `Response time: ${duration}ms`
+                );
+            } catch (error) {
+                log('Ping error:', error);
+                showResult('test2', 'error', 
+                    `❌ Ошибка соединения\n\n` +
+                    `Error: ${error.message}\n` +
+                    `URL: ${API_URL}/ping\n\n` +
+                    `Возможные причины:\n` +
+                    `- Сервер не запущен\n` +
+                    `- Неправильный URL\n` +
+                    `- CORS проблема\n` +
+                    `- Сервер "спит" (Render free tier)`
+                );
+            }
+        }
+
+        // Test 3: Get Tasks
+        async function testGetTasks() {
+            log('Testing GET /api/tasks');
+            showResult('test3', 'loading', 'Отправка запроса...');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/tasks`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                log('Tasks response:', data);
+                
+                showResult('test3', 'success', 
+                    `✅ Успешно\n\n` +
+                    `Количество задач: ${data.length}\n` +
+                    `Response:\n${JSON.stringify(data, null, 2).substring(0, 300)}...`
+                );
+            } catch (error) {
+                log('Get tasks error:', error);
+                showResult('test3', 'error', 
+                    `❌ Ошибка\n\n` +
+                    `Error: ${error.message}\n` +
+                    `URL: ${API_URL}/api/tasks`
+                );
+            }
+        }
+
+        // Test 4: Get Users
+        async function testGetUsers() {
+            log('Testing GET /api/users');
+            showResult('test4', 'loading', 'Отправка запроса...');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/users`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                log('Users response:', data);
+                
+                showResult('test4', 'success', 
+                    `✅ Успешно\n\n` +
+                    `Количество пользователей: ${data.length}\n` +
+                    `Response:\n${JSON.stringify(data, null, 2).substring(0, 300)}...`
+                );
+            } catch (error) {
+                log('Get users error:', error);
+                showResult('test4', 'error', 
+                    `❌ Ошибка\n\n` +
+                    `Error: ${error.message}\n` +
+                    `URL: ${API_URL}/api/users`
+                );
+            }
+        }
+
+        // Test 5: Create User
+        async function testCreateUser() {
+            log('Testing POST /api/user/register');
+            showResult('test5', 'loading', 'Отправка запроса...');
+            
+            const testUser = {
+                telegram_id: Math.floor(Math.random() * 1000000),
+                username: `test_user_${Date.now()}`,
+                first_name: 'Test User',
+                photo_url: null,
+                timezone: 'Europe/Kiev',
+                language: 'uk'
+            };
+            
+            try {
+                const response = await fetch(`${API_URL}/api/user/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testUser)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                log('Create user response:', data);
+                
+                showResult('test5', 'success', 
+                    `✅ Успешно создан пользователь\n\n` +
+                    `Username: ${data.username}\n` +
+                    `Telegram ID: ${data.telegram_id}\n` +
+                    `Response:\n${JSON.stringify(data, null, 2)}`
+                );
+            } catch (error) {
+                log('Create user error:', error);
+                showResult('test5', 'error', 
+                    `❌ Ошибка\n\n` +
+                    `Error: ${error.message}\n` +
+                    `URL: ${API_URL}/api/user/register`
+                );
+            }
+        }
+
+        // Test 6: Create Task
+        async function testCreateTask() {
+            log('Testing POST /api/tasks');
+            showResult('test6', 'loading', 'Отправка запроса...');
+            
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            
+            const nextWeek = new Date();
+            nextWeek.setDate(nextWeek.getDate() + 7);
+            
+            const testTask = {
+                title: `Test Task ${Date.now()}`,
+                description: 'This is a test task',
+                preparation_date: tomorrow.toISOString(),
+                event_date: nextWeek.toISOString(),
+                created_by: 12345,
+                created_by_username: 'test_user'
+            };
+            
+            try {
+                const response = await fetch(`${API_URL}/api/tasks`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testTask)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                log('Create task response:', data);
+                
+                showResult('test6', 'success', 
+                    `✅ Успешно создана задача\n\n` +
+                    `Title: ${data.title}\n` +
+                    `ID: ${data.id}\n` +
+                    `Status: ${data.status}\n` +
+                    `Response:\n${JSON.stringify(data, null, 2).substring(0, 300)}...`
+                );
+            } catch (error) {
+                log('Create task error:', error);
+                showResult('test6', 'error', 
+                    `❌ Ошибка\n\n` +
+                    `Error: ${error.message}\n` +
+                    `URL: ${API_URL}/api/tasks`
+                );
+            }
+        }
+
+        // Run all tests
+        async function runAllTests() {
+            log('Running all tests...');
+            
+            await testApiUrl();
+            await new Promise(r => setTimeout(r, 500));
+            
+            await testPing();
+            await new Promise(r => setTimeout(r, 500));
+            
+            await testGetTasks();
+            await new Promise(r => setTimeout(r, 500));
+            
+            await testGetUsers();
+            await new Promise(r => setTimeout(r, 500));
+            
+            await testCreateUser();
+            await new Promise(r => setTimeout(r, 500));
+            
+            await testCreateTask();
+            
+            log('All tests completed!');
+        }
+    </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-<!--DOCTYPE html>
+<!DOCTYPE html>
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
@@ -9,7 +9,7 @@
 </head>
 <body>
     <div class="container">
-
+        <!-- Header -->
         <div class="header">
             <h1 data-translate="appTitle">Менеджер завдань</h1>
             <div class="user-info">
@@ -17,7 +17,7 @@
             </div>
         </div>
 
-
+        <!-- Navigation -->
         <div class="nav-tabs">
             <button class="nav-tab active" data-view="tasks" onclick="switchView('tasks')">
                 <span data-translate="navTasks">Завдання</span>
@@ -30,13 +30,13 @@
             </button>
         </div>
 
-
+        <!-- Tasks View -->
         <div id="tasksView" class="view">
             <button class="create-btn" onclick="openCreateModal()">
                 <span data-translate="createTask">+ Створити завдання</span>
             </button>
 
- 
+            <!-- Search Section -->
             <div class="search-section">
                 <div class="search-title" data-translate="searchByDate">Пошук за датою</div>
                 <div class="search-inputs">
@@ -67,12 +67,12 @@
             </div>
         </div>
 
-
+        <!-- Archive View -->
         <div id="archiveView" class="view" style="display: none;">
             <div id="archiveContainer"></div>
         </div>
 
-
+        <!-- Settings View -->
         <div id="settingsView" class="view" style="display: none;">
             <div class="task-card">
                 <h3 data-translate="language">Мова</h3>
@@ -95,7 +95,7 @@
         </div>
     </div>
 
-
+    <!-- Task Modal -->
     <div id="taskModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -106,7 +106,6 @@
             <form id="taskForm" onsubmit="saveTask(event)">
                 <input type="hidden" id="taskId">
 
-
                 <div class="form-group">
                     <label data-translate="title">Назва *</label>
                     <input type="text" id="taskTitle" name="title" 
@@ -114,14 +113,12 @@
                            placeholder="Назва завдання" required>
                 </div>
 
-
                 <div class="form-group">
                     <label data-translate="description">Опис</label>
                     <textarea id="taskDescription" name="description" 
                               data-translate-placeholder="descriptionPlaceholder"
                               placeholder="Опис завдання (необов'язково)"></textarea>
                 </div>
-
 
                 <div class="form-group">
                     <label data-translate="preparationDate">Дата підготовки *</label>
@@ -133,7 +130,6 @@
                     <input type="datetime-local" id="taskEventDate" name="event_date" required>
                 </div>
 
-
                 <div class="form-group">
                     <label data-translate="photos">Фотографії</label>
                     <div class="file-input-wrapper">
@@ -144,7 +140,6 @@
                     </div>
                     <div id="photoPreview" class="photo-preview"></div>
                 </div>
-
 
                 <div class="form-group">
                     <button type="button" id="checklistToggleBtn" class="btn btn-secondary" 
@@ -168,7 +163,6 @@
                     </div>
                 </div>
 
-
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeModal('taskModal')">
                         <span data-translate="cancel">Скасувати</span>
@@ -181,579 +175,21 @@
         </div>
     </div>
 
->
+    <!-- Photo Viewer -->
     <div id="photoViewer" class="photo-viewer">
         <button class="photo-viewer-close" onclick="closePhotoViewer()">&times;</button>
         <img id="viewerImage" src="" alt="Photo">
     </div>
 
+    <!-- Global Loader -->
     <div id="globalLoader" class="global-loader">
         <div class="loader-content">
             <div class="loader-spinner"></div>
             <div class="loader-text" id="loaderText">Завантаження...</div>
         </div>
     </div>
+
     <script src="locales.js"></script>
     <script src="app.js"></script>
-</body>
-</html-->
-
-
-
-
-
-
-
-
-
-
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Task Manager</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1e1b4b 0%, #0f0f23 100%);
-            color: #fff;
-            min-height: 100vh;
-            padding: 0;
-        }
-
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        /* Header */
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-        }
-
-        .header h1 {
-            font-size: 28px;
-            font-weight: 700;
-            background: linear-gradient(90deg, #a855f7, #ec4899);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #a855f7, #ec4899);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 600;
-            font-size: 16px;
-            overflow: hidden;
-        }
-
-        .user-avatar img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        /* Navigation */
-        .nav-tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 20px;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 6px;
-            border-radius: 16px;
-            backdrop-filter: blur(10px);
-        }
-
-        .nav-tab {
-            flex: 1;
-            padding: 10px;
-            background: transparent;
-            border: none;
-            border-radius: 12px;
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .nav-tab.active {
-            background: rgba(168, 85, 247, 0.2);
-            color: #a855f7;
-        }
-
-        /* Create Button */
-        .create-btn {
-            width: 100%;
-            padding: 16px;
-            background: linear-gradient(90deg, #a855f7, #ec4899);
-            border: none;
-            border-radius: 16px;
-            color: white;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 20px rgba(168, 85, 247, 0.3);
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .create-btn:active {
-            transform: scale(0.98);
-        }
-
-        /* Search Section */
-        .search-section {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 20px;
-            backdrop-filter: blur(10px);
-        }
-
-        .search-title {
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 16px;
-            color: rgba(255, 255, 255, 0.8);
-        }
-
-        .search-inputs {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-bottom: 16px;
-        }
-
-        .form-group label {
-            display: block;
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.6);
-            margin-bottom: 6px;
-        }
-
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            color: white;
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.3s;
-        }
-
-        .form-group input:focus {
-            border-color: #a855f7;
-        }
-
-        .search-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .btn {
-            flex: 1;
-            padding: 12px;
-            border: none;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-primary {
-            background: linear-gradient(90deg, #a855f7, #ec4899);
-            color: white;
-        }
-
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.1);
-            color: rgba(255, 255, 255, 0.8);
-        }
-
-        /* Task Card */
-        .task-card {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 16px;
-            backdrop-filter: blur(10px);
-            position: relative;
-            overflow: hidden;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .task-card:active {
-            transform: scale(0.99);
-        }
-
-        .task-card.status-preparation {
-            border-color: rgba(168, 85, 247, 0.4);
-            box-shadow: 0 0 20px rgba(168, 85, 247, 0.1);
-        }
-
-        .task-card.status-urgent {
-            border-color: rgba(236, 72, 153, 0.4);
-            box-shadow: 0 0 20px rgba(236, 72, 153, 0.1);
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% {
-                box-shadow: 0 0 20px rgba(236, 72, 153, 0.2);
-            }
-            50% {
-                box-shadow: 0 0 30px rgba(236, 72, 153, 0.4);
-            }
-        }
-
-        .status-badge {
-            position: absolute;
-            top: 16px;
-            right: 16px;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .status-badge.preparation {
-            background: rgba(168, 85, 247, 0.2);
-            color: #a855f7;
-        }
-
-        .status-badge.urgent {
-            background: rgba(236, 72, 153, 0.2);
-            color: #ec4899;
-        }
-
-        .status-badge.future {
-            background: rgba(255, 255, 255, 0.1);
-            color: rgba(255, 255, 255, 0.6);
-        }
-
-        .task-title {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            padding-right: 100px;
-        }
-
-        .task-description {
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 14px;
-            line-height: 1.5;
-            margin-bottom: 16px;
-        }
-
-        .task-dates {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin: 16px 0;
-        }
-
-        .date-item {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 12px;
-            border-radius: 12px;
-        }
-
-        .date-label {
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.5);
-            margin-bottom: 4px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .date-value {
-            font-size: 13px;
-            font-weight: 500;
-        }
-
-        .task-actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-top: 16px;
-        }
-
-        .btn-small {
-            flex: 1;
-            min-width: 100px;
-            padding: 10px 16px;
-            font-size: 13px;
-        }
-
-        .btn-success {
-            background: rgba(34, 197, 94, 0.2);
-            color: #22c55e;
-            border: 1px solid rgba(34, 197, 94, 0.3);
-        }
-
-        .btn-danger {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-            border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-
-        /* Empty State */
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: rgba(255, 255, 255, 0.5);
-        }
-
-        .empty-state-icon {
-            font-size: 64px;
-            margin-bottom: 16px;
-            opacity: 0.3;
-        }
-
-        /* Modal */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(10px);
-            z-index: 1000;
-            align-items: flex-end;
-            animation: fadeIn 0.3s;
-        }
-
-        .modal.active {
-            display: flex;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        .modal-content {
-            background: linear-gradient(135deg, #1e1b4b 0%, #0f0f23 100%);
-            border-radius: 24px 24px 0 0;
-            padding: 24px;
-            width: 100%;
-            max-height: 90vh;
-            overflow-y: auto;
-            animation: slideUp 0.3s;
-        }
-
-        @keyframes slideUp {
-            from { transform: translateY(100%); }
-            to { transform: translateY(0); }
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-        }
-
-        .modal-header h2 {
-            font-size: 22px;
-            font-weight: 700;
-            background: linear-gradient(90deg, #a855f7, #ec4899);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .close-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            font-size: 24px;
-            color: rgba(255, 255, 255, 0.6);
-            cursor: pointer;
-        }
-
-        textarea {
-            width: 100%;
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            color: white;
-            font-size: 14px;
-            font-family: inherit;
-            resize: vertical;
-            min-height: 80px;
-            outline: none;
-        }
-
-        textarea:focus {
-            border-color: #a855f7;
-        }
-
-        .form-actions {
-            display: flex;
-            gap: 12px;
-            margin-top: 24px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <h1>Менеджер завдань</h1>
-            <div class="user-avatar">U</div>
-        </div>
-
-        <!-- Navigation -->
-        <div class="nav-tabs">
-            <button class="nav-tab active">Завдання</button>
-            <button class="nav-tab">Архів</button>
-            <button class="nav-tab">Налаштування</button>
-        </div>
-
-        <!-- Create Button -->
-        <button class="create-btn" onclick="openModal()">+ Створити завдання</button>
-
-        <!-- Search -->
-        <div class="search-section">
-            <div class="search-title">Пошук за датою</div>
-            <div class="search-inputs">
-                <div class="form-group">
-                    <label>Від</label>
-                    <input type="date">
-                </div>
-                <div class="form-group">
-                    <label>До</label>
-                    <input type="date">
-                </div>
-            </div>
-            <div class="search-actions">
-                <button class="btn btn-primary">Шукати</button>
-                <button class="btn btn-secondary">Скинути</button>
-            </div>
-        </div>
-
-        <!-- Tasks -->
-        <div class="task-card status-preparation">
-            <div class="status-badge preparation">Підготовка</div>
-            <div class="task-title">День народження Максима</div>
-            <div class="task-description">Купити торт, прикрасити кімнату, запросити друзів</div>
-            
-            <div class="task-dates">
-                <div class="date-item">
-                    <div class="date-label">⏰ Підготовка</div>
-                    <div class="date-value">15 лют, 18:00</div>
-                </div>
-                <div class="date-item">
-                    <div class="date-label">🎯 Подія</div>
-                    <div class="date-value">20 лют, 14:00</div>
-                </div>
-            </div>
-
-            <div class="task-actions">
-                <button class="btn btn-success btn-small">✓ Готовий</button>
-                <button class="btn btn-danger btn-small">✗ Не йду</button>
-                <button class="btn btn-primary btn-small">Редагувати</button>
-            </div>
-        </div>
-
-        <div class="task-card status-urgent">
-            <div class="status-badge urgent">Терміново!</div>
-            <div class="task-title">Зустріч з клієнтом</div>
-            
-            <div class="task-dates">
-                <div class="date-item">
-                    <div class="date-label">⏰ Підготовка</div>
-                    <div class="date-value">Сьогодні, 09:00</div>
-                </div>
-                <div class="date-item">
-                    <div class="date-label">🎯 Подія</div>
-                    <div class="date-value">Сьогодні, 15:00</div>
-                </div>
-            </div>
-
-            <div class="task-actions">
-                <button class="btn btn-success btn-small">✓ Готовий</button>
-                <button class="btn btn-primary btn-small">Редагувати</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal -->
-    <div id="taskModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Нове завдання</h2>
-                <button class="close-btn" onclick="closeModal()">×</button>
-            </div>
-
-            <form>
-                <div class="form-group">
-                    <label>Назва *</label>
-                    <input type="text" placeholder="Назва завдання" required>
-                </div>
-
-                <div class="form-group">
-                    <label>Опис</label>
-                    <textarea placeholder="Опис завдання (необов'язково)"></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label>Дата підготовки *</label>
-                    <input type="datetime-local" required>
-                </div>
-
-                <div class="form-group">
-                    <label>Дата події *</label>
-                    <input type="datetime-local" required>
-                </div>
-
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Скасувати</button>
-                    <button type="submit" class="btn btn-primary">Зберегти</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <script>
-        function openModal() {
-            document.getElementById('taskModal').classList.add('active');
-        }
-
-        function closeModal() {
-            document.getElementById('taskModal').classList.remove('active');
-        }
-    </script>
 </body>
 </html>
