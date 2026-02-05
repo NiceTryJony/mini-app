@@ -1,46 +1,194 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="uk">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Mini App</title>
+    <title>Task Manager</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            background: var(--tg-theme-bg-color);
-            color: var(--tg-theme-text-color);
-        }
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        button {
-            background: var(--tg-theme-button-color);
-            color: var(--tg-theme-button-text-color);
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            margin-top: 20px;
-        }
-        #response {
-            margin-top: 20px;
-            padding: 15px;
-            background: rgba(0,0,0,0.1);
-            border-radius: 8px;
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <h1>Мое Mini App</h1>
-        <p id="user-info">Загрузка...</p>
-        <button id="sendBtn">Отправить запрос</button>
-        <div id="response"></div>
+        <!-- Заголовок -->
+        <div class="header">
+            <h1 data-translate="appTitle">Менеджер завдань</h1>
+            <div class="user-info">
+                <div class="user-avatar" id="userAvatar">U</div>
+            </div>
+        </div>
+
+        <!-- Навигация -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-view="tasks" onclick="switchView('tasks')">
+                <span data-translate="navTasks">Завдання</span>
+            </button>
+            <button class="nav-tab" data-view="archive" onclick="switchView('archive')">
+                <span data-translate="navArchive">Архів</span>
+            </button>
+            <button class="nav-tab" data-view="settings" onclick="switchView('settings')">
+                <span data-translate="navSettings">Налаштування</span>
+            </button>
+        </div>
+
+        <!-- ВКЛАДКА: Задачи -->
+        <div id="tasksView" class="view">
+            <button class="create-btn" onclick="openCreateModal()">
+                <span data-translate="createTask">+ Створити завдання</span>
+            </button>
+
+            <!-- Поиск -->
+            <div class="search-section">
+                <div class="search-title" data-translate="searchByDate">Пошук за датою</div>
+                <div class="search-inputs">
+                    <div class="form-group">
+                        <label data-translate="dateFrom">Від</label>
+                        <input type="date" id="searchDateFrom">
+                    </div>
+                    <div class="form-group">
+                        <label data-translate="dateTo">До</label>
+                        <input type="date" id="searchDateTo">
+                    </div>
+                </div>
+                <div class="search-actions">
+                    <button class="btn btn-primary" onclick="searchTasks()">
+                        <span data-translate="search">Шукати</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetSearch()">
+                        <span data-translate="resetSearch">Скинути</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Список задач -->
+            <div id="tasksContainer">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <div data-translate="loading">Завантаження...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ВКЛАДКА: Архив -->
+        <div id="archiveView" class="view" style="display: none;">
+            <div id="archiveContainer"></div>
+        </div>
+
+        <!-- ВКЛАДКА: Настройки -->
+        <div id="settingsView" class="view" style="display: none;">
+            <div class="task-card">
+                <h3 data-translate="language">Мова</h3>
+                <p>Поточна: <strong id="currentLangText">Українська</strong></p>
+                <button class="btn btn-primary" onclick="changeLanguage()">
+                    Змінити на English / Change to Українська
+                </button>
+            </div>
+
+            <div class="task-card">
+                <h3 data-translate="timezone">Часовий пояс</h3>
+                <p id="timezoneInfo"></p>
+            </div>
+
+            <div class="task-card">
+                <h3>Про додаток</h3>
+                <p>Task Manager v2.0</p>
+                <p>Менеджер завдань для команди з підтримкою уведомлень, чек-листів та фото.</p>
+            </div>
+        </div>
     </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО: Создание/Редактирование задачи -->
+    <div id="taskModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="taskModalTitle" data-translate="newTask">Нове завдання</h2>
+                <button class="close-btn" onclick="closeModal('taskModal')">&times;</button>
+            </div>
+
+            <form id="taskForm" onsubmit="saveTask(event)">
+                <input type="hidden" id="taskId">
+
+                <!-- Название -->
+                <div class="form-group">
+                    <label data-translate="title">Назва *</label>
+                    <input type="text" id="taskTitle" name="title" 
+                           data-translate-placeholder="titlePlaceholder" 
+                           placeholder="Назва завдання" required>
+                </div>
+
+                <!-- Описание -->
+                <div class="form-group">
+                    <label data-translate="description">Опис</label>
+                    <textarea id="taskDescription" name="description" 
+                              data-translate-placeholder="descriptionPlaceholder"
+                              placeholder="Опис завдання (необов'язково)"></textarea>
+                </div>
+
+                <!-- Даты -->
+                <div class="form-group">
+                    <label data-translate="preparationDate">Дата підготовки *</label>
+                    <input type="datetime-local" id="taskPrepDate" name="preparation_date" required>
+                </div>
+
+                <div class="form-group">
+                    <label data-translate="eventDate">Дата події *</label>
+                    <input type="datetime-local" id="taskEventDate" name="event_date" required>
+                </div>
+
+                <!-- Фото -->
+                <div class="form-group">
+                    <label data-translate="photos">Фотографії</label>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="photoInput" accept="image/*" onchange="uploadPhoto()">
+                        <label for="photoInput" class="file-input-label">
+                            <span data-translate="addPhoto">📷 Додати фото</span>
+                        </label>
+                    </div>
+                    <div id="photoPreview" class="photo-preview"></div>
+                </div>
+
+                <!-- Чек-лист -->
+                <div class="form-group">
+                    <button type="button" id="checklistToggleBtn" class="btn btn-secondary" 
+                            onclick="toggleChecklistSection()">
+                        ▶ <span data-translate="showChecklist">Показати чек-лист</span>
+                    </button>
+                </div>
+
+                <div id="checklistSection" style="display: none;">
+                    <div class="form-group">
+                        <label data-translate="checklist">Чек-лист</label>
+                        <div class="checklist-form">
+                            <div class="checklist-input-group">
+                                <input type="text" id="checklistItemInput" 
+                                       placeholder="Новий пункт чек-листу">
+                                <button type="button" class="btn btn-primary" 
+                                        onclick="addChecklistItemToForm()">+</button>
+                            </div>
+                        </div>
+                        <div id="checklistPreview" class="checklist-items" style="margin-top: 12px;"></div>
+                    </div>
+                </div>
+
+                <!-- Кнопки -->
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('taskModal')">
+                        <span data-translate="cancel">Скасувати</span>
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <span data-translate="save">Зберегти</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ПРОСМОТР ФОТО -->
+    <div id="photoViewer" class="photo-viewer">
+        <button class="photo-viewer-close" onclick="closePhotoViewer()">&times;</button>
+        <img id="viewerImage" src="" alt="Photo">
+    </div>
+
+    <script src="locales.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
