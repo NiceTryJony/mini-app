@@ -1,5 +1,4 @@
-const API_URL = 'https://mini-app-2pze.onrender.com';
-
+const API_URL = 'https://mini-app-backend-jqr6.onrender.com'; // Твой URL
 
 let tg = window.Telegram.WebApp;
 tg.expand();
@@ -7,31 +6,80 @@ tg.expand();
 let currentUser = null;
 let currentLang = 'uk';
 let allUsers = [];
-let currentView = 'tasks'; // 'tasks', 'archive', 'settings'
+let currentView = 'tasks';
 let currentTasks = [];
 let checklistExpanded = false;
+let loadingTimeout = null;
+
+// === ГЛОБАЛЬНЫЙ ИНДИКАТОР ЗАГРУЗКИ ===
+
+function showLoader(message) {
+    const loader = document.getElementById('globalLoader');
+    const loaderText = document.getElementById('loaderText');
+    
+    if (message) {
+        loaderText.textContent = message;
+    } else {
+        loaderText.textContent = currentLang === 'uk' ? 'Завантаження...' : 'Loading...';
+    }
+    
+    loader.classList.add('active');
+    document.body.classList.add('loading');
+    
+    // Таймаут на 30 секунд
+    clearTimeout(loadingTimeout);
+    loadingTimeout = setTimeout(() => {
+        hideLoader();
+        if (confirm(currentLang === 'uk' 
+            ? 'Сервер не відповідає. Перезавантажити додаток?' 
+            : 'Server is not responding. Reload the app?')) {
+            window.location.reload();
+        }
+    }, 30000);
+}
+
+function hideLoader() {
+    const loader = document.getElementById('globalLoader');
+    loader.classList.remove('active');
+    document.body.classList.remove('loading');
+    clearTimeout(loadingTimeout);
+}
+
+// === ОБЕРТКА ДЛЯ FETCH С ЗАГРУЗКОЙ ===
+
+async function fetchWithLoader(url, options = {}, loaderMessage = null) {
+    showLoader(loaderMessage);
+    try {
+        const response = await fetch(url, options);
+        hideLoader();
+        return response;
+    } catch (error) {
+        hideLoader();
+        console.error('Fetch error:', error);
+        tg.showAlert(currentLang === 'uk' 
+            ? 'Помилка з\'єднання з сервером' 
+            : 'Connection error');
+        throw error;
+    }
+}
 
 // === ИНИЦИАЛИЗАЦИЯ ===
 
 async function init() {
+    showLoader(currentLang === 'uk' ? 'Ініціалізація...' : 'Initializing...');
+    
     const user = tg.initDataUnsafe.user;
     
     if (user) {
-        // Регистрируем пользователя
         currentUser = await registerUser(user);
         currentLang = currentUser.language || 'uk';
-        
-        // Загружаем всех пользователей
         allUsers = await loadAllUsers();
-        
         updateUI();
     }
     
-    // Загружаем задачи
     await loadTasks();
-    
-    // Обновляем интерфейс
     renderView();
+    hideLoader();
 }
 
 async function registerUser(user) {
@@ -69,7 +117,11 @@ async function loadAllUsers() {
 
 async function loadTasks() {
     try {
-        const response = await fetch(`${API_URL}/api/tasks`);
+        const response = await fetchWithLoader(
+            `${API_URL}/api/tasks`,
+            {},
+            currentLang === 'uk' ? 'Завантаження завдань...' : 'Loading tasks...'
+        );
         currentTasks = await response.json();
         renderTasksList();
     } catch (error) {
@@ -80,13 +132,11 @@ async function loadTasks() {
 // === РЕНДЕРИНГ ===
 
 function updateUI() {
-    // Обновляем переводы
     document.querySelectorAll('[data-translate]').forEach(el => {
         const key = el.getAttribute('data-translate');
         el.textContent = t(key, currentLang);
     });
     
-    // Обновляем пользователя
     const userAvatar = document.getElementById('userAvatar');
     if (currentUser) {
         if (currentUser.photo_url) {
@@ -98,19 +148,14 @@ function updateUI() {
 }
 
 function renderView() {
-    // Скрываем все вкладки
     document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
-    
-    // Показываем активную
     document.getElementById(`${currentView}View`).style.display = 'block';
     
-    // Обновляем навигацию
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.classList.remove('active');
     });
     document.querySelector(`[data-view="${currentView}"]`).classList.add('active');
     
-    // Загружаем данные для вкладки
     if (currentView === 'tasks') {
         loadTasks();
     } else if (currentView === 'archive') {
@@ -151,7 +196,6 @@ function createTaskCard(task) {
     const eventDate = new Date(task.event_date);
     const prepDate = new Date(task.preparation_date);
     
-    // Статус badge
     let statusText = '';
     switch(task.status) {
         case 'future': statusText = t('statusFuture', currentLang); break;
@@ -160,7 +204,6 @@ function createTaskCard(task) {
         case 'urgent': statusText = t('statusUrgent', currentLang); break;
     }
     
-    // Готовые пользователи
     const readyUsersHtml = task.ready_users && task.ready_users.length > 0 ? `
         <div class="ready-section">
             <div class="ready-label">${t('readyForEvent', currentLang)}</div>
@@ -180,7 +223,6 @@ function createTaskCard(task) {
         </div>
     ` : '';
     
-    // Фото
     const photosHtml = task.photos && task.photos.length > 0 ? `
         <div class="task-photos">
             ${task.photos.map((photo, index) => `
@@ -192,7 +234,6 @@ function createTaskCard(task) {
         </div>
     ` : '';
     
-    // Чеклист
     const checklistHtml = task.checklist && task.checklist.length > 0 ? `
         <div class="checklist-section">
             <div class="checklist-toggle" onclick="toggleChecklistView('${task.id}')">
@@ -211,13 +252,11 @@ function createTaskCard(task) {
         </div>
     ` : '';
     
-    // Кнопки действий
     const isAuthor = currentUser && task.created_by === currentUser.telegram_id;
     const canEdit = isAuthor;
     
     let actionsHtml = '<div class="task-actions">';
     
-    // Готов/Не иду
     const isReady = task.ready_users && task.ready_users.includes(currentUser?.telegram_id);
     const isNotGoing = task.not_going_users && task.not_going_users.includes(currentUser?.telegram_id);
     
@@ -228,22 +267,18 @@ function createTaskCard(task) {
         actionsHtml += `<button class="btn btn-danger btn-small" onclick="markNotGoing('${task.id}')">${t('markNotGoing', currentLang)}</button>`;
     }
     
-    // Завершить подготовку
     if (task.status === 'preparation' && !task.is_preparation_completed) {
         actionsHtml += `<button class="btn btn-success" onclick="completePreparation('${task.id}')">${t('completePreparation', currentLang)}</button>`;
     } else if (task.is_preparation_completed) {
         actionsHtml += `<button class="btn btn-secondary" onclick="uncompletePreparation('${task.id}')">${t('uncompletePreparation', currentLang)}</button>`;
     }
     
-    // Редактировать (только автор)
     if (canEdit) {
         actionsHtml += `<button class="btn btn-primary btn-small" onclick="openEditModal('${task.id}')">${t('edit', currentLang)}</button>`;
     }
     
-    // Завершить задачу
     actionsHtml += `<button class="btn btn-success btn-small" onclick="finishTask('${task.id}')">${t('finishTask', currentLang)}</button>`;
     
-    // Удалить (только автор)
     if (canEdit) {
         actionsHtml += `<button class="btn btn-danger btn-small" onclick="deleteTask('${task.id}')">${t('delete', currentLang)}</button>`;
     }
@@ -290,8 +325,13 @@ function openCreateModal() {
 }
 
 async function openEditModal(taskId) {
+    showLoader(currentLang === 'uk' ? 'Завантаження завдання...' : 'Loading task...');
+    
     const task = currentTasks.find(t => t.id === taskId);
-    if (!task) return;
+    if (!task) {
+        hideLoader();
+        return;
+    }
     
     document.getElementById('taskModalTitle').textContent = t('editTask', currentLang);
     document.getElementById('taskId').value = taskId;
@@ -300,7 +340,6 @@ async function openEditModal(taskId) {
     document.getElementById('taskEventDate').value = task.event_date.slice(0, 16);
     document.getElementById('taskPrepDate').value = task.preparation_date.slice(0, 16);
     
-    // Фото
     const photoPreview = document.getElementById('photoPreview');
     photoPreview.innerHTML = task.photos.map((photo, index) => `
         <div class="photo-preview-item">
@@ -309,12 +348,12 @@ async function openEditModal(taskId) {
         </div>
     `).join('');
     
-    // Чеклист
     checklistExpanded = task.checklist && task.checklist.length > 0;
     renderChecklistPreview(task.checklist || []);
     document.getElementById('checklistSection').style.display = checklistExpanded ? 'block' : 'none';
     
     document.getElementById('taskModal').classList.add('active');
+    hideLoader();
 }
 
 function closeModal(modalId) {
@@ -351,10 +390,8 @@ function addChecklistItemToForm() {
     const taskId = document.getElementById('taskId').value;
     
     if (taskId) {
-        // Редактирование - добавляем сразу на сервер
         addChecklistItemToTask(taskId, text);
     } else {
-        // Создание - добавляем временно
         tempChecklist.push({
             id: Date.now().toString(),
             text: text,
@@ -393,7 +430,6 @@ async function saveTask(event) {
         created_by_username: currentUser.username
     };
     
-    // Чеклист для новой задачи
     if (!taskId) {
         taskData.checklist = tempChecklist;
         tempChecklist = [];
@@ -402,19 +438,25 @@ async function saveTask(event) {
     try {
         let response;
         if (taskId) {
-            // Редактирование
-            response = await fetch(`${API_URL}/api/tasks/${taskId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(taskData)
-            });
+            response = await fetchWithLoader(
+                `${API_URL}/api/tasks/${taskId}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(taskData)
+                },
+                currentLang === 'uk' ? 'Оновлення завдання...' : 'Updating task...'
+            );
         } else {
-            // Создание
-            response = await fetch(`${API_URL}/api/tasks`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(taskData)
-            });
+            response = await fetchWithLoader(
+                `${API_URL}/api/tasks`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(taskData)
+                },
+                currentLang === 'uk' ? 'Створення завдання...' : 'Creating task...'
+            );
         }
         
         if (response.ok) {
@@ -424,7 +466,6 @@ async function saveTask(event) {
         }
     } catch (error) {
         console.error('Error saving task:', error);
-        tg.showAlert(t('error', currentLang));
     }
 }
 
@@ -433,7 +474,7 @@ async function saveTask(event) {
 async function uploadPhoto() {
     const taskId = document.getElementById('taskId').value;
     if (!taskId) {
-        tg.showAlert('Сначала сохраните задачу');
+        tg.showAlert(currentLang === 'uk' ? 'Спочатку збережіть завдання' : 'Save the task first');
         return;
     }
     
@@ -446,16 +487,19 @@ async function uploadPhoto() {
     formData.append('photo', file);
     
     try {
-        const response = await fetch(`${API_URL}/api/tasks/${taskId}/photos`, {
-            method: 'POST',
-            body: formData
-        });
+        const response = await fetchWithLoader(
+            `${API_URL}/api/tasks/${taskId}/photos`,
+            {
+                method: 'POST',
+                body: formData
+            },
+            currentLang === 'uk' ? 'Завантаження фото...' : 'Uploading photo...'
+        );
         
         if (response.ok) {
             const data = await response.json();
             tg.showAlert(t('photoUploaded', currentLang));
             
-            // Обновляем превью
             const preview = document.getElementById('photoPreview');
             const newPhoto = document.createElement('div');
             newPhoto.className = 'photo-preview-item';
@@ -475,12 +519,13 @@ async function uploadPhoto() {
 
 async function removePhoto(taskId, photoIndex) {
     try {
-        const response = await fetch(`${API_URL}/api/tasks/${taskId}/photos/${photoIndex}`, {
-            method: 'DELETE'
-        });
+        const response = await fetchWithLoader(
+            `${API_URL}/api/tasks/${taskId}/photos/${photoIndex}`,
+            { method: 'DELETE' },
+            currentLang === 'uk' ? 'Видалення фото...' : 'Deleting photo...'
+        );
         
         if (response.ok) {
-            // Обновляем превью
             const preview = document.getElementById('photoPreview');
             preview.children[photoIndex].remove();
         }
@@ -517,13 +562,17 @@ function toggleChecklistView(taskId) {
 
 async function toggleChecklistItem(taskId, itemId) {
     try {
-        const response = await fetch(`${API_URL}/api/tasks/${taskId}/checklist/${itemId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                toggle_user: currentUser.telegram_id
-            })
-        });
+        const response = await fetchWithLoader(
+            `${API_URL}/api/tasks/${taskId}/checklist/${itemId}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    toggle_user: currentUser.telegram_id
+                })
+            },
+            currentLang === 'uk' ? 'Оновлення...' : 'Updating...'
+        );
         
         if (response.ok) {
             await loadTasks();
@@ -535,11 +584,15 @@ async function toggleChecklistItem(taskId, itemId) {
 
 async function addChecklistItemToTask(taskId, text) {
     try {
-        const response = await fetch(`${API_URL}/api/tasks/${taskId}/checklist`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text })
-        });
+        const response = await fetchWithLoader(
+            `${API_URL}/api/tasks/${taskId}/checklist`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            },
+            currentLang === 'uk' ? 'Додавання пункту...' : 'Adding item...'
+        );
         
         if (response.ok) {
             const task = await response.json();
@@ -554,11 +607,15 @@ async function addChecklistItemToTask(taskId, text) {
 
 async function markReady(taskId) {
     try {
-        const response = await fetch(`${API_URL}/api/tasks/${taskId}/ready`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: currentUser.telegram_id })
-        });
+        const response = await fetchWithLoader(
+            `${API_URL}/api/tasks/${taskId}/ready`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: currentUser.telegram_id })
+            },
+            currentLang === 'uk' ? 'Позначення...' : 'Marking...'
+        );
         
         if (response.ok) {
             await loadTasks();
@@ -570,13 +627,17 @@ async function markReady(taskId) {
 
 async function markNotGoing(taskId) {
     try {
-        const response = await fetch(`${API_URL}/api/tasks/${taskId}/not-going`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: currentUser.telegram_id })
-        });
+        const response = await fetchWithLoader(
+            `${API_URL}/api/tasks/${taskId}/not-going`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: currentUser.telegram_id })
+            },
+            currentLang === 'uk' ? 'Позначення...' : 'Marking...'
+        );
         
-(response.ok); {
+        if (response.ok) {
             await loadTasks();
         }
     } catch (error) {
@@ -586,9 +647,11 @@ async function markNotGoing(taskId) {
 
 async function completePreparation(taskId) {
     try {
-        const response = await fetch(`${API_URL}/api/tasks/${taskId}/complete`, {
-            method: 'POST'
-        });
+        const response = await fetchWithLoader(
+            `${API_URL}/api/tasks/${taskId}/complete`,
+            { method: 'POST' },
+            currentLang === 'uk' ? 'Завершення підготовки...' : 'Completing preparation...'
+        );
         
         if (response.ok) {
             await loadTasks();
@@ -600,9 +663,11 @@ async function completePreparation(taskId) {
 
 async function uncompletePreparation(taskId) {
     try {
-        const response = await fetch(`${API_URL}/api/tasks/${taskId}/uncomplete`, {
-            method: 'POST'
-        });
+        const response = await fetchWithLoader(
+            `${API_URL}/api/tasks/${taskId}/uncomplete`,
+            { method: 'POST' },
+            currentLang === 'uk' ? 'Скасування...' : 'Uncompleting...'
+        );
         
         if (response.ok) {
             await loadTasks();
@@ -616,13 +681,15 @@ async function finishTask(taskId) {
     if (!confirm(t('confirmFinish', currentLang))) return;
     
     try {
-        const response = await fetch(`${API_URL}/api/tasks/${taskId}/finish`, {
-            method: 'POST'
-        });
+        const response = await fetchWithLoader(
+            `${API_URL}/api/tasks/${taskId}/finish`,
+            { method: 'POST' },
+            currentLang === 'uk' ? 'Завершення завдання...' : 'Finishing task...'
+        );
         
         if (response.ok) {
             await loadTasks();
-            tg.showAlert('✅ Завдання завершено!');
+            tg.showAlert('✅ ' + (currentLang === 'uk' ? 'Завдання завершено!' : 'Task finished!'));
         }
     } catch (error) {
         console.error('Error finishing task:', error);
@@ -633,9 +700,11 @@ async function deleteTask(taskId) {
     if (!confirm(t('confirmDelete', currentLang))) return;
     
     try {
-        const response = await fetch(`${API_URL}/api/tasks/${taskId}`, {
-            method: 'DELETE'
-        });
+        const response = await fetchWithLoader(
+            `${API_URL}/api/tasks/${taskId}`,
+            { method: 'DELETE' },
+            currentLang === 'uk' ? 'Видалення...' : 'Deleting...'
+        );
         
         if (response.ok) {
             await loadTasks();
@@ -650,13 +719,17 @@ async function deleteTask(taskId) {
 
 async function loadArchive() {
     try {
+        showLoader(currentLang === 'uk' ? 'Завантаження архіву...' : 'Loading archive...');
+        
         const [deleted, completed] = await Promise.all([
             fetch(`${API_URL}/api/archive/deleted`).then(r => r.json()),
             fetch(`${API_URL}/api/archive/completed`).then(r => r.json())
         ]);
         
+        hideLoader();
         renderArchive(deleted, completed);
     } catch (error) {
+        hideLoader();
         console.error('Error loading archive:', error);
     }
 }
@@ -711,9 +784,11 @@ function createArchiveCard(task, type) {
 
 async function restoreDeletedTask(taskId) {
     try {
-        const response = await fetch(`${API_URL}/api/tasks/${taskId}/restore`, {
-            method: 'POST'
-        });
+        const response = await fetchWithLoader(
+            `${API_URL}/api/tasks/${taskId}/restore`,
+            { method: 'POST' },
+            currentLang === 'uk' ? 'Відновлення...' : 'Restoring...'
+        );
         
         if (response.ok) {
             await loadArchive();
@@ -726,9 +801,11 @@ async function restoreDeletedTask(taskId) {
 
 async function restoreCompletedTask(taskId) {
     try {
-        const response = await fetch(`${API_URL}/api/tasks/${taskId}/restore-completed`, {
-            method: 'POST'
-        });
+        const response = await fetchWithLoader(
+            `${API_URL}/api/tasks/${taskId}/restore-completed`,
+            { method: 'POST' },
+            currentLang === 'uk' ? 'Відновлення...' : 'Restoring...'
+        );
         
         if (response.ok) {
             await loadArchive();
@@ -745,11 +822,15 @@ async function changeLanguage() {
     const newLang = currentLang === 'uk' ? 'en' : 'uk';
     
     try {
-        const response = await fetch(`${API_URL}/api/user/${currentUser.telegram_id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ language: newLang })
-        });
+        const response = await fetchWithLoader(
+            `${API_URL}/api/user/${currentUser.telegram_id}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ language: newLang })
+            },
+            currentLang === 'uk' ? 'Зміна мови...' : 'Changing language...'
+        );
         
         if (response.ok) {
             currentLang = newLang;
@@ -773,7 +854,11 @@ async function searchTasks() {
         if (dateFrom) url += `date_from=${new Date(dateFrom).toISOString()}&`;
         if (dateTo) url += `date_to=${new Date(dateTo).toISOString()}`;
         
-        const response = await fetch(url);
+        const response = await fetchWithLoader(
+            url,
+            {},
+            currentLang === 'uk' ? 'Пошук...' : 'Searching...'
+        );
         currentTasks = await response.json();
         renderTasksList();
     } catch (error) {
