@@ -1,11 +1,68 @@
 const API_URL = 'https://mini-app-2pze.onrender.com';
 
+// Безопасная инициализация Telegram WebApp
 let tg = window.Telegram?.WebApp || { 
-    expand: () => {}, 
+    expand: () => {},
     ready: () => {},
-    showAlert: (msg) => alert(msg),
-    initDataUnsafe: { user: null }
+    showAlert: (msg) => {
+        // Fallback для старых версий
+        if (window.alert) {
+            alert(msg);
+        } else {
+            console.log('[ALERT]', msg);
+        }
+    },
+    showPopup: (params, callback) => {
+        // Fallback для старых версий
+        if (confirm(params.message)) {
+            callback && callback('ok');
+        } else {
+            callback && callback('cancel');
+        }
+    },
+    initDataUnsafe: { user: null },
+    version: '6.0'
 };
+
+// Безопасный showAlert
+function safeShowAlert(message) {
+    try {
+        if (tg.showAlert && typeof tg.showAlert === 'function') {
+            tg.showAlert(message);
+        } else if (window.alert) {
+            alert(message);
+        } else {
+            console.log('[ALERT]', message);
+        }
+    } catch (error) {
+        console.log('[ALERT]', message);
+    }
+}
+
+// Безопасный confirm
+function safeConfirm(message) {
+    try {
+        if (tg.showPopup && typeof tg.showPopup === 'function') {
+            return new Promise((resolve) => {
+                tg.showPopup({
+                    message: message,
+                    buttons: [
+                        { id: 'ok', type: 'ok' },
+                        { id: 'cancel', type: 'cancel' }
+                    ]
+                }, (buttonId) => {
+                    resolve(buttonId === 'ok');
+                });
+            });
+        } else if (window.confirm) {
+            return Promise.resolve(confirm(message));
+        } else {
+            return Promise.resolve(true);
+        }
+    } catch (error) {
+        return Promise.resolve(confirm(message));
+    }
+}
 
 tg.expand();
 
@@ -19,7 +76,11 @@ let loadingTimeout = null;
 
 // === ОТЛАДКА ===
 function logDebug(message, data = null) {
-    console.log(`[DEBUG] ${message}`, data || '');
+    if (data !== null && data !== undefined && data !== '') {
+        console.log(`[DEBUG] ${message}`, data);
+    } else {
+        console.log(`[DEBUG] ${message}`);
+    }
 }
 
 // === ГЛОБАЛЬНЫЙ ИНДИКАТОР ЗАГРУЗКИ ===
@@ -44,11 +105,13 @@ function showLoader(message) {
     clearTimeout(loadingTimeout);
     loadingTimeout = setTimeout(() => {
         hideLoader();
-        if (confirm(currentLang === 'uk' 
+        safeConfirm(currentLang === 'uk' 
             ? 'Сервер не відповідає. Перезавантажити додаток?' 
-            : 'Server is not responding. Reload the app?')) {
-            window.location.reload();
-        }
+            : 'Server is not responding. Reload the app?').then(result => {
+                if (result) {
+                    window.location.reload();
+                }
+            });
     }, 60000);
 }
 
@@ -85,7 +148,7 @@ async function fetchWithLoader(url, options = {}, loaderMessage = null) {
     } catch (error) {
         hideLoader();
         logDebug('Fetch error:', error);
-        tg.showAlert(currentLang === 'uk' 
+        safeShowAlert(currentLang === 'uk' 
             ? `Помилка з'єднання: ${error.message}` 
             : `Connection error: ${error.message}`);
         throw error;
@@ -95,32 +158,43 @@ async function fetchWithLoader(url, options = {}, loaderMessage = null) {
 // === ИНИЦИАЛИЗАЦИЯ ===
 async function init() {
     logDebug('Initializing app...');
+    logDebug('Telegram WebApp version:', tg.version || 'unknown');
     
     const user = tg.initDataUnsafe?.user;
     
-    logDebug('Telegram user:', user);
+    logDebug('Telegram user:', user || 'none');
     
     if (user) {
+        // Реальный пользователь Telegram
         currentUser = {
             telegram_id: user.id,
             username: user.username || 'user',
             first_name: user.first_name || 'User',
             photo_url: user.photo_url,
-            language: 'uk'
+            language: user.language_code === 'uk' || user.language_code === 'ru' ? 'uk' : 'en'
         };
-        currentLang = 'uk';
+        currentLang = currentUser.language;
         
         updateUI();
         renderView();
         
         loadServerDataInBackground(user);
     } else {
-        // Режим разработки - создаем тестового пользователя
+        // Режим разработки / браузер
         logDebug('No Telegram user, using demo mode');
+        
+        // Проверяем localStorage на наличие сохраненного демо-пользователя
+        const savedUserId = localStorage.getItem('demo_user_id');
+        const demoUserId = savedUserId ? parseInt(savedUserId) : Math.floor(Math.random() * 1000000);
+        
+        if (!savedUserId) {
+            localStorage.setItem('demo_user_id', demoUserId.toString());
+        }
+        
         currentUser = {
-            telegram_id: 12345,
-            username: 'demo_user',
-            first_name: 'Demo',
+            telegram_id: demoUserId,
+            username: `demo_${demoUserId}`,
+            first_name: 'Demo User',
             photo_url: null,
             language: 'uk'
         };
@@ -129,8 +203,16 @@ async function init() {
         updateUI();
         renderView();
         
-        // Пробуем загрузить данные с сервера
+        // Регистрируем демо-пользователя
         try {
+            await registerUser({
+                id: demoUserId,
+                username: currentUser.username,
+                first_name: currentUser.first_name,
+                photo_url: null,
+                language_code: 'uk'
+            });
+            
             await testServerConnection();
             await loadTasks();
         } catch (error) {
@@ -199,7 +281,7 @@ async function loadServerDataInBackground(user) {
         hideLoader();
         logDebug('Background server loading error:', error);
         
-        tg.showAlert(currentLang === 'uk'
+        safeShowAlert(currentLang === 'uk'
             ? 'Помилка підключення до сервера. Функціонал обмежений.'
             : 'Server connection error. Limited functionality.');
     }
@@ -207,6 +289,7 @@ async function loadServerDataInBackground(user) {
 
 async function registerUser(user) {
     try {
+        logDebug('Registering user:', user.id);
         const response = await fetch(`${API_URL}/api/user/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -214,9 +297,9 @@ async function registerUser(user) {
                 telegram_id: user.id,
                 username: user.username || 'user',
                 first_name: user.first_name || 'User',
-                photo_url: user.photo_url,
+                photo_url: user.photo_url || null,
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                language: 'uk'
+                language: user.language_code === 'uk' || user.language_code === 'ru' ? 'uk' : 'en'
             })
         });
         
@@ -224,7 +307,9 @@ async function registerUser(user) {
             throw new Error(`Registration failed: ${response.status}`);
         }
         
-        return await response.json();
+        const data = await response.json();
+        logDebug('User registered:', data);
+        return data;
     } catch (error) {
         logDebug('Error registering user:', error);
         return null;
@@ -237,7 +322,9 @@ async function loadAllUsers() {
         if (!response.ok) {
             throw new Error(`Failed to load users: ${response.status}`);
         }
-        return await response.json();
+        const users = await response.json();
+        logDebug('Users loaded:', users.length);
+        return users;
     } catch (error) {
         logDebug('Error loading users:', error);
         return [];
@@ -296,6 +383,11 @@ function updateUI() {
     if (timezoneInfo) {
         timezoneInfo.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone;
     }
+    
+    const currentLangText = document.getElementById('currentLangText');
+    if (currentLangText) {
+        currentLangText.textContent = currentLang === 'uk' ? 'Українська' : 'English';
+    }
 }
 
 function renderView() {
@@ -334,6 +426,11 @@ function renderTasksList() {
     if (!container) {
         logDebug('Tasks container not found!');
         return;
+    }
+    
+    if (!Array.isArray(currentTasks)) {
+        logDebug('currentTasks is not an array:', currentTasks);
+        currentTasks = [];
     }
     
     if (currentTasks.length === 0) {
@@ -628,7 +725,7 @@ async function saveTask(event) {
         if (response.ok) {
             closeModal('taskModal');
             await loadTasks();
-            tg.showAlert(taskId ? t('taskUpdated', currentLang) : t('taskCreated', currentLang));
+            safeShowAlert(taskId ? t('taskUpdated', currentLang) : t('taskCreated', currentLang));
         }
     } catch (error) {
         logDebug('Error saving task:', error);
@@ -639,7 +736,7 @@ async function saveTask(event) {
 async function uploadPhoto() {
     const taskId = document.getElementById('taskId').value;
     if (!taskId) {
-        tg.showAlert(currentLang === 'uk' ? 'Спочатку збережіть завдання' : 'Save the task first');
+        safeShowAlert(currentLang === 'uk' ? 'Спочатку збережіть завдання' : 'Save the task first');
         return;
     }
     
@@ -652,20 +749,21 @@ async function uploadPhoto() {
     formData.append('photo', file);
     
     try {
+        showLoader(currentLang === 'uk' ? 'Завантаження фото...' : 'Uploading photo...');
+        
         const response = await fetch(`${API_URL}/api/tasks/${taskId}/photos`, {
             method: 'POST',
             body: formData
         });
         
-        showLoader(currentLang === 'uk' ? 'Завантаження фото...' : 'Uploading photo...');
+        hideLoader();
         
         if (!response.ok) {
             throw new Error(`Upload failed: ${response.status}`);
         }
         
         const data = await response.json();
-        hideLoader();
-        tg.showAlert(t('photoUploaded', currentLang));
+        safeShowAlert(t('photoUploaded', currentLang));
         
         const preview = document.getElementById('photoPreview');
         const newPhoto = document.createElement('div');
@@ -844,7 +942,8 @@ async function uncompletePreparation(taskId) {
 }
 
 async function finishTask(taskId) {
-    if (!confirm(t('confirmFinish', currentLang))) return;
+    const confirmed = await safeConfirm(t('confirmFinish', currentLang));
+    if (!confirmed) return;
     
     try {
         const response = await fetchWithLoader(
@@ -855,7 +954,7 @@ async function finishTask(taskId) {
         
         if (response.ok) {
             await loadTasks();
-            tg.showAlert('✅ ' + (currentLang === 'uk' ? 'Завдання завершено!' : 'Task finished!'));
+            safeShowAlert('✅ ' + (currentLang === 'uk' ? 'Завдання завершено!' : 'Task finished!'));
         }
     } catch (error) {
         logDebug('Error finishing task:', error);
@@ -863,7 +962,8 @@ async function finishTask(taskId) {
 }
 
 async function deleteTask(taskId) {
-    if (!confirm(t('confirmDelete', currentLang))) return;
+    const confirmed = await safeConfirm(t('confirmDelete', currentLang));
+    if (!confirmed) return;
     
     try {
         const response = await fetchWithLoader(
@@ -874,7 +974,7 @@ async function deleteTask(taskId) {
         
         if (response.ok) {
             await loadTasks();
-            tg.showAlert(t('taskDeleted', currentLang));
+            safeShowAlert(t('taskDeleted', currentLang));
         }
     } catch (error) {
         logDebug('Error deleting task:', error);
@@ -957,7 +1057,7 @@ async function restoreDeletedTask(taskId) {
         
         if (response.ok) {
             await loadArchive();
-            tg.showAlert(t('taskRestored', currentLang));
+            safeShowAlert(t('taskRestored', currentLang));
         }
     } catch (error) {
         logDebug('Error restoring task:', error);
@@ -974,7 +1074,7 @@ async function restoreCompletedTask(taskId) {
         
         if (response.ok) {
             await loadArchive();
-            tg.showAlert(t('taskRestored', currentLang));
+            safeShowAlert(t('taskRestored', currentLang));
         }
     } catch (error) {
         logDebug('Error restoring task:', error);
@@ -986,15 +1086,11 @@ async function changeLanguage() {
     const newLang = currentLang === 'uk' ? 'en' : 'uk';
     
     try {
-        const response = await fetchWithLoader(
-            `${API_URL}/api/user/${currentUser.telegram_id}`,
-            {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ language: newLang })
-            },
-            currentLang === 'uk' ? 'Зміна мови...' : 'Changing language...'
-        );
+        const response = await fetch(`${API_URL}/api/user/${currentUser.telegram_id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ language: newLang })
+        });
         
         if (response.ok) {
             currentLang = newLang;
@@ -1004,6 +1100,12 @@ async function changeLanguage() {
         }
     } catch (error) {
         logDebug('Error changing language:', error);
+        
+        // Меняем локально даже если запрос не прошел
+        currentLang = newLang;
+        currentUser.language = newLang;
+        updateUI();
+        renderView();
     }
 }
 
